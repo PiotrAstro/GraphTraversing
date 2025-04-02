@@ -26,6 +26,7 @@ function construct_graph(csv_path::String)::Dict{Symbol, Node}
     graph = Dict{Symbol, Node}()
     previous_arrival::Int = 0
     previous_stop::Symbol = Symbol("")
+    previous_start_stop::Symbol = Symbol("")
     course::Union{Course, Nothing} = nothing
     # Add the nodes
     for row in eachrow(df)
@@ -45,22 +46,25 @@ function construct_graph(csv_path::String)::Dict{Symbol, Node}
         elseif (
             course.line != line
             || previous_stop != start_stop
+            || previous_start_stop == end_stop
             || mod(departure_time - previous_arrival, MINUTES_PER_DAY) > SAME_LINE_TIME_THRESHOLD
             )
             course_id_next = course.id + 1
             course = Course(line=line, id=course_id_next)
         end
+        if start_stop != end_stop
+            node_from = get!(graph, start_stop, Node(name=start_stop, longitude=start_stop_lon, latitude=start_stop_lat))
+            node_to = get!(graph, end_stop, Node(name=end_stop, longitude=end_stop_lon, latitude=end_stop_lat))
 
-        node_from = get!(graph, start_stop, Node(name=start_stop, longitude=start_stop_lon, latitude=start_stop_lat))
-        node_to = get!(graph, end_stop, Node(name=end_stop, longitude=end_stop_lon, latitude=end_stop_lat))
-
-        ride = Ride(from_node=node_from, to_node=node_to, start_time=departure_time, end_time=arrival_time, course=course)
-        ride_vector = get!(node_from.connections, node_to, Vector{Ride}())
-        push!(ride_vector, ride)
-        push!(course.rides, ride)
+            ride = Ride(from_node=node_from, to_node=node_to, start_time=departure_time, end_time=arrival_time, course=course)
+            ride_vector = get!(node_from.connections, node_to, Vector{Ride}())
+            push!(ride_vector, ride)
+            push!(course.rides, ride)
+        end
 
         previous_arrival = arrival_time
         previous_stop = end_stop
+        previous_start_stop = start_stop
     end
 
     return graph
@@ -102,4 +106,12 @@ function construct_time_graph(graph::Dict{Symbol, Node}) :: Dict{Symbol, NodeByT
     end
 
     return graph_time
+end
+
+
+@kwdef struct ResultPath
+    path::Vector{Ride}
+    cost::Float64
+    arrival_time::Int
+    ride_time::Int
 end

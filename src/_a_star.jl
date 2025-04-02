@@ -7,7 +7,7 @@ function heuristic_changes(node1::NodeOptimization, node2::NodeOptimization)::Fl
     return heuristic_kilometers(node1, node2) / 60.0 + get_arrival_time(node1) / 120.0 # approximated 1 hour per change
 end
 
-function a_star(general_graph::Dict{Symbol, Node}, from::Symbol, to::Symbol, leave_time::Int, mode::Symbol)::Tuple{Vector{Ride}, Float64}
+function a_star(general_graph::Dict{Symbol, Node}, from::Symbol, to::Symbol, leave_time::Int, mode::Symbol)::ResultPath
     if mode == :time
         graph = construct_time_graph(general_graph)
         heuristic_function = heuristic_kilometers
@@ -21,7 +21,7 @@ function a_star(general_graph::Dict{Symbol, Node}, from::Symbol, to::Symbol, lea
     return a_star!(graph, from, to, leave_time, heuristic_function)
 end
 
-function a_star!(graph::Dict{Symbol, N}, from::Symbol, to::Symbol, leave_time::Int, heuristic_function::Function=heuristic_kilometers, get_cost::Function=get_cost)::Tuple{Vector{Ride}, Float64} where {N<:NodeOptimization}
+function a_star!(graph::Dict{Symbol, N}, from::Symbol, to::Symbol, leave_time::Int, heuristic_function::Function=heuristic_kilometers, get_cost::Function=get_cost)::ResultPath where {N<:NodeOptimization}
     from_node = graph[from]
     to_node = graph[to]
 
@@ -31,13 +31,17 @@ function a_star!(graph::Dict{Symbol, N}, from::Symbol, to::Symbol, leave_time::I
     closed_set = Set{N}()
     open_queue = DataStructures.PriorityQueue{N, Float64}()
     DataStructures.enqueue!(open_queue, from_node, 0.0)
-    
     while !DataStructures.isempty(open_queue)
         current_node = DataStructures.dequeue!(open_queue)
         push!(closed_set, current_node)
 
         if current_node == to_node
-            return get_path(current_node, graph), get_cost(current_node) - get_cost(from_node)
+            return ResultPath(
+                path=get_path(current_node, graph),
+                cost=get_cost(current_node) - get_cost(from_node),
+                arrival_time=get_arrival_time(current_node),
+                ride_time=get_arrival_time(current_node) - get_arrival_time(from_node)
+            )
         end
 
         for neighbour in get_neighbours(current_node)
@@ -49,8 +53,9 @@ function a_star!(graph::Dict{Symbol, N}, from::Symbol, to::Symbol, leave_time::I
             else
                 if update!(current_node, neighbour)
                     if neighbour in closed_set
-                        pop!(closed_set, neighbour)
-                    else
+                        delete!(closed_set, neighbour)
+                    end
+                    if neighbour in keys(open_queue)
                         DataStructures.dequeue!(open_queue, neighbour)
                     end
 
